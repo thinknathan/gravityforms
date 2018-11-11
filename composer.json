@@ -3,5 +3,10 @@
   "type": "wordpress-plugin",
   "require": {
     "composer/installers": ">=1.0.6"
+  },
+  "autoload": {
+    "classmap": [
+            "."
+        ]
   }
 }
