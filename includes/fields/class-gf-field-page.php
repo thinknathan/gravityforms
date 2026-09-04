@@ -8,6 +8,25 @@ class GF_Field_Page extends GF_Field {
 
 	public $type = 'page';
 
+	/**
+	 * Whether there can be more than one of this field type per form.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @var bool
+	 */
+	public $duplicatable = true;
+
+	/**
+	 * Whether the field can be used in a repeater.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @var bool
+	 */
+	public $repeatable = false;
+
+
 	public function get_form_editor_field_title() {
 		return esc_attr__( 'Page', 'gravityforms' );
 	}
@@ -36,7 +55,7 @@ class GF_Field_Page extends GF_Field {
 		return 'gform-icon--page';
 	}
 
-	function get_form_editor_field_settings() {
+	public function get_form_editor_field_settings() {
 		return array(
 			'next_button_setting',
 			'previous_button_setting',
@@ -55,7 +74,9 @@ class GF_Field_Page extends GF_Field {
 	public function sanitize_settings() {
 		parent::sanitize_settings();
 		if ( $this->nextButton ) {
-			$this->nextButton['imageUrl'] = wp_strip_all_tags( $this->nextButton['imageUrl'] );
+			if ( isset( $this->nextButton['imageUrl'] ) )  {
+				$this->nextButton['imageUrl'] = wp_strip_all_tags( $this->nextButton['imageUrl'] );
+			}
 			$allowed_tags      = wp_kses_allowed_html( 'post' );
 			$this->nextButton['text'] = wp_kses( $this->nextButton['text'], $allowed_tags );
 			$this->nextButton['type'] = wp_strip_all_tags( $this->nextButton['type'] );
