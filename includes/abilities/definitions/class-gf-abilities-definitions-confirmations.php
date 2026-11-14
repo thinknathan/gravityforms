@@ -60,7 +60,7 @@ class GF_Abilities_Definitions_Confirmations {
 						'additionalProperties' => false,
 					),
 					'output_schema'    => self::mutation_output_schema(),
-					'destructive'      => false,
+					'destructive'      => true,
 				),
 			),
 			array(
@@ -91,18 +91,17 @@ class GF_Abilities_Definitions_Confirmations {
 				'name' => 'gravityforms/confirmations-delete',
 				'args' => array(
 					'label'            => __( 'Delete Confirmation', 'gravityforms' ),
-					'description'      => __( 'Permanently removes one confirmation by ID. The form\'s default confirmation cannot be deleted (edit it instead). Call gravityforms/confirmations-list first to get the confirmation_id, and echo it back as confirmation.', 'gravityforms' ),
+					'description'      => __( 'Permanently removes one confirmation by ID. The form\'s default confirmation cannot be deleted (edit it instead). Call gravityforms/confirmations-list first to get the confirmation_id.', 'gravityforms' ),
 					'summary'          => __( 'Delete a confirmation from a form.', 'gravityforms' ),
 					'category'         => 'gravityforms-confirmations',
 					'execute_callback' => array( GF_Abilities_Handler_Confirmations::class, 'delete_confirmation' ),
 					'capability'       => 'gravityforms_edit_forms',
 					'input_schema'     => array(
 						'type'                 => 'object',
-						'required'             => array( 'form_id', 'confirmation_id', 'confirmation' ),
+						'required'             => array( 'form_id', 'confirmation_id' ),
 						'properties'           => array(
 							'form_id'         => array( 'type' => 'integer', 'description' => __( 'The ID of the form.', 'gravityforms' ) ),
 							'confirmation_id' => array( 'type' => 'string', 'description' => __( 'The ID of the confirmation to delete.', 'gravityforms' ) ),
-							'confirmation'    => array( 'type' => 'string', 'description' => __( 'Echo back the confirmation ID to confirm permanent deletion.', 'gravityforms' ) ),
 						),
 						'additionalProperties' => false,
 					),

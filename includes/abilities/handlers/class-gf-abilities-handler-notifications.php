@@ -62,7 +62,7 @@ class GF_Abilities_Handler_Notifications {
 
 		$entry = \GFAPI::get_entry( absint( $input['entry_id'] ) );
 		if ( is_wp_error( $entry ) ) {
-			return new \WP_Error( 'gf_ability_not_found', __( 'Entry not found.', 'gravityforms' ) );
+			return $entry;
 		}
 
 		if ( (int) rgar( $entry, 'form_id' ) !== absint( $input['form_id'] ) ) {
@@ -71,46 +71,15 @@ class GF_Abilities_Handler_Notifications {
 
 		$notification_ids = isset( $input['notification_ids'] ) && is_array( $input['notification_ids'] ) ? array_values( $input['notification_ids'] ) : array();
 		$notifications    = rgar( $form, 'notifications', array() );
-		$notifications    = is_array( $notifications ) ? $notifications : array();
-		$skipped          = array();
 
-		foreach ( $notification_ids as $requested_id ) {
-			if ( ! isset( $notifications[ $requested_id ] ) ) {
-				$skipped[ (string) $requested_id ] = 'not_found';
-			}
+		if ( ! empty( $notification_ids ) && is_array( $notifications ) ) {
+			$notifications         = array_intersect_key( $notifications, array_flip( $notification_ids ) );
+			$form['notifications'] = $notifications;
 		}
 
-		if ( ! empty( $notification_ids ) ) {
-			$notifications = array_intersect_key( $notifications, array_flip( $notification_ids ) );
-		}
+		$sent = \GFAPI::send_notifications( $form, $entry );
 
-		// GFAPI::send_notifications() lists every notification it hands to the
-		// pipeline, and the pipeline then drops inactive ones and ones whose
-		// conditional logic does not match. Drop them here so "sent" is true.
-		foreach ( $notifications as $notification_id => $notification ) {
-			if ( 'form_submission' !== rgar( $notification, 'event', 'form_submission' ) ) {
-				$skipped[ (string) $notification_id ] = 'event';
-			} elseif ( isset( $notification['isActive'] ) && ! $notification['isActive'] ) { // rgar() would swap false for its default.
-				$skipped[ (string) $notification_id ] = 'inactive';
-			} elseif ( ! empty( $notification['conditionalLogic'] ) && ! \GFCommon::evaluate_conditional_logic( $notification['conditionalLogic'], $form, $entry ) ) {
-				$skipped[ (string) $notification_id ] = 'conditional_logic';
-			} else {
-				continue;
-			}
-
-			unset( $notifications[ $notification_id ] );
-		}
-
-		$form['notifications'] = $notifications;
-
-		$sent = empty( $notifications ) ? array() : \GFAPI::send_notifications( $form, $entry );
-
-		return array(
-			'sent'    => array_values( is_array( $sent ) ? $sent : array() ),
-			// Object-typed in the output schema; an empty array, or one whose only
-			// keys are numeric strings like "0", would encode as a JSON list.
-			'skipped' => (object) $skipped,
-		);
+		return array( 'sent' => array_values( is_array( $sent ) ? $sent : array() ) );
 	}
 
 	/**
@@ -163,7 +132,6 @@ class GF_Abilities_Handler_Notifications {
 		$settings['id'] = uniqid();
 
 		$error = self::validate( $settings );
-		$error = is_wp_error( $error ) ? $error : GF_Abilities_Handler_Forms::check_repeater_rule_sources( rgar( $form, 'fields', array() ), $settings );
 		if ( is_wp_error( $error ) ) {
 			return $error;
 		}
@@ -212,7 +180,6 @@ class GF_Abilities_Handler_Notifications {
 		$merged['id'] = $id;
 
 		$error = self::validate( $merged );
-		$error = is_wp_error( $error ) ? $error : GF_Abilities_Handler_Forms::check_repeater_rule_sources( rgar( $form, 'fields', array() ), $merged );
 		if ( is_wp_error( $error ) ) {
 			return $error;
 		}
@@ -249,11 +216,6 @@ class GF_Abilities_Handler_Notifications {
 		list( $form, $notifications ) = $loaded;
 
 		$id = (string) rgar( $input, 'notification_id' );
-
-		// Permanent, like the other deletes: the caller echoes the id back.
-		if ( ( $input['confirmation'] ?? '' ) !== $id ) {
-			return new \WP_Error( 'gf_ability_confirmation_mismatch', __( 'Confirmation does not match the notification ID. Please provide the exact notification ID to confirm deletion.', 'gravityforms' ) );
-		}
 
 		if ( ! isset( $notifications[ $id ] ) ) {
 			return new \WP_Error( 'gf_ability_not_found', __( 'Notification not found on this form.', 'gravityforms' ) );
@@ -323,30 +285,6 @@ class GF_Abilities_Handler_Notifications {
 			'subject' => __( 'a subject', 'gravityforms' ),
 			'message' => __( 'a message', 'gravityforms' ),
 		);
-
-		// A routed notification picks its recipient per rule; "to" stays empty.
-		$is_routing = 'routing' === rgar( $notification, 'toType' );
-
-		if ( $is_routing ) {
-			unset( $required['to'] );
-
-			$rules = rgar( $notification, 'routing' );
-			$valid = is_array( $rules ) && ! empty( $rules );
-
-			foreach ( $valid ? $rules : array() as $rule ) {
-				if ( ! is_array( $rule ) || '' === (string) rgar( $rule, 'email' ) || '' === (string) rgar( $rule, 'fieldId' ) ) {
-					$valid = false;
-					break;
-				}
-			}
-
-			if ( ! $valid ) {
-				return new \WP_Error(
-					'gf_ability_invalid_notification',
-					__( 'A routing notification requires a non-empty routing array; each rule needs fieldId, operator, value and email.', 'gravityforms' )
-				);
-			}
-		}
 
 		$missing = array();
 		foreach ( $required as $key => $label ) {

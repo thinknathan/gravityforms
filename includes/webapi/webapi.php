@@ -39,7 +39,6 @@ if ( class_exists( 'GFForms' ) ) {
 
 		private $_private_key;
 		private $_public_key;
-		private $authenticated_submission_request = false;
 
 		// Members plugin integration
 		protected $_capabilities = array( 'gravityforms_api', 'gravityforms_api_settings' );
@@ -830,7 +829,6 @@ if ( class_exists( 'GFForms' ) ) {
 			if ( false == $route ) {
 				return;
 			}
-			$this->authenticated_submission_request = false;
 
 			send_origin_headers();
 
@@ -889,12 +887,8 @@ if ( class_exists( 'GFForms' ) ) {
 			 */
 			$authentication_required = apply_filters( 'gform_webapi_authentication_required_' . $endpoint, $authentication_required );
 
-			// Verify credentials supplied to the public submissions endpoint before treating it as an authenticated API request.
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- authenticate() validates any provided credentials.
-			$submission_credentials_supplied = $endpoint === 'post_forms_submissions' && ( isset( $_GET['api_key'] ) || ( is_user_logged_in() && isset( $_REQUEST['_gf_json_nonce'] ) ) );
-			if ( $authentication_required || $submission_credentials_supplied ) {
-				$this->authenticate( $endpoint === 'post_forms_submissions' ? $id : 0 );
-				$this->authenticated_submission_request = $endpoint === 'post_forms_submissions';
+			if ( $authentication_required ) {
+				$this->authenticate();
 			} else {
 				$this->log_debug( __METHOD__ . '(): Authentication not required.' );
 			}
@@ -1465,27 +1459,13 @@ if ( class_exists( 'GFForms' ) ) {
 				$this->die_bad_request();
 			}
 
-			$form = GFAPI::get_form( $form_id );
-			if ( is_array( $form ) && GFCommon::form_requires_login( $form ) && ! is_user_logged_in() ) {
-				status_header( 401 );
-				$this->die_permission_denied();
-			}
-
 			$field_values = isset( $data['field_values'] ) ? $data['field_values'] : array();
 			$target_page  = isset( $data['target_page'] ) ? $data['target_page'] : 0;
 			$source_page  = isset( $data['source_page'] ) ? $data['source_page'] : 1;
 
-			if ( $this->authenticated_submission_request ) {
-				add_filter( 'gform_skip_form_login_nonce_' . $form_id, '__return_true' );
-			}
+			add_filter( 'gform_require_login', '__return_false' );
 
-			try {
-				$result = GFAPI::submit_form( $form_id, $data['input_values'], $field_values, $target_page, $source_page );
-			} finally {
-				if ( $this->authenticated_submission_request ) {
-					remove_filter( 'gform_skip_form_login_nonce_' . $form_id, '__return_true' );
-				}
-			}
+			$result = GFAPI::submit_form( $form_id, $data['input_values'], $field_values, $target_page, $source_page );
 
 			if ( is_wp_error( $result ) ) {
 				$response = $this->get_error_response( $result );
@@ -1953,7 +1933,7 @@ if ( class_exists( 'GFForms' ) ) {
 				foreach ( $form['fields'] as $field ) {
 					/* @var GF_Field $field */
 					if ( $field->get_input_type() == 'list' ) {
-						$new_value = GFCommon::maybe_unserialize( $entry[ $field->id ] );
+						$new_value = maybe_unserialize( $entry[ $field->id ] );
 
 						if ( ! $this->is_json( $new_value ) ) {
 							$new_value = json_encode( $new_value );
@@ -2365,15 +2345,7 @@ if ( class_exists( 'GFForms' ) ) {
 		// ----- end RESULTS
 
 
-		/**
-		 * Authenticates a v1 request and rejects credentials that do not verify.
-		 *
-		 * @since unknown
-		 * @since 3.2.1
-		 *
-		 * @param int $submission_form_id Form ID for a submissions request, or zero for other endpoints.
-		 */
-		private function authenticate( $submission_form_id = 0 ) {
+		private function authenticate() {
 			$this->log_debug( __METHOD__ . '(): Running.' );
 
 			if ( isset( $_REQUEST['_gf_json_nonce'] ) && is_user_logged_in() ) {
@@ -2410,12 +2382,6 @@ if ( class_exists( 'GFForms' ) ) {
 
 			if ( ! $authenticated ) {
 				$this->log_debug( __METHOD__ . '(): Could not authenticate, permission denied.' );
-				if ( $submission_form_id && ! is_user_logged_in() ) {
-					$form = GFAPI::get_form( absint( $submission_form_id ) );
-					if ( is_array( $form ) && GFCommon::form_requires_login( $form ) ) {
-						status_header( 401 );
-					}
-				}
 				$this->die_permission_denied();
 			}
 		}
